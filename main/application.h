@@ -156,6 +156,7 @@ private:
     uint32_t notification_playback_id_ = 0;
     std::string pending_radio_name_;
     std::string pending_radio_url_;
+    std::string current_radio_name_;  // station shown on screen while the radio plays
     int pending_radio_ticks_ = 0;
     std::unique_ptr<Ota> ota_;
 

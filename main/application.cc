@@ -1116,7 +1116,16 @@ void Application::HandleStateChangedEvent() {
             audio_service_.ResetDecoder();
             break;
         case kDeviceStateNotifying:
-            display->SetStatus(Lang::Strings::SPEAKING);
+            if (!current_radio_name_.empty()) {
+                // Radio playback: show the station instead of "Speaking"
+                display->SetStatus(current_radio_name_.c_str());
+                display->SetEmotion("relaxed");
+                std::string hint = "Playing " + current_radio_name_ +
+                                   ". Say the wake word or press BOOT to stop.";
+                display->SetChatMessage("assistant", hint.c_str());
+            } else {
+                display->SetStatus(Lang::Strings::SPEAKING);
+            }
             audio_service_.EnableVoiceProcessing(false);
             audio_service_.EnableWakeWordDetection(audio_service_.IsAfeWakeWord());
             break;
@@ -1277,6 +1286,7 @@ void Application::StartNotification(std::string audio_url, std::vector<NotifySub
 void Application::StopNotification() {
     notify_player_.Stop();
     radio_player_.Stop();
+    current_radio_name_.clear();
     audio_service_.ResetDecoder();
     auto& board = Board::GetInstance();
     board.GetDisplay()->SetChatMessage("assistant", "");
@@ -1348,7 +1358,9 @@ void Application::StartRadioNow() {
     while (audio_service_.PopPacketFromSendQueue()) {
         // Discard microphone audio left over from the conversation.
     }
+    current_radio_name_ = name;  // used by the notifying-state UI
     if (!SetDeviceState(kDeviceStateNotifying)) {
+        current_radio_name_.clear();
         board.SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
         return;
     }
@@ -1357,9 +1369,6 @@ void Application::StartRadioNow() {
     if (playback_id == 0) {
         playback_id = ++notification_playback_id_;
     }
-
-    std::string message = "Radio: " + name;
-    board.GetDisplay()->SetChatMessage("assistant", message.c_str());
 
     bool started = radio_player_.Start(url, playback_id, [this](uint32_t id, bool success) {
         Schedule([this, id]() { HandleRadioFinished(id); });
