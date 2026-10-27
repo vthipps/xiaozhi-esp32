@@ -32,10 +32,12 @@ constexpr int kPushChunkMs = 60;
 // Default stations. Streams come from an unofficial relay used by
 // tamilradios.com; update the URLs here if they ever stop working.
 const std::vector<RadioStation> kStations = {
-    {"Suryan FM", "http://radios.crabdance.com:8002/2",
+    {"Suryan FM", "93.5 FM", 0xF5A300, "http://radios.crabdance.com:8002/2",
      "suryan,surya,sooryan,soorian,suriyan,93.5,93 5"},
-    {"Hello FM", "http://radios.crabdance.com:8002/3", "hello fm,hello,106.4,106 4"},
-    {"Radio Mirchi", "http://radios.crabdance.com:8002/1", "mirchi,mirch,mirchy,98.3,98 3"},
+    {"Hello FM", "106.4 FM", 0x2F7BE0, "http://radios.crabdance.com:8002/3",
+     "hello fm,hello,106.4,106 4"},
+    {"Radio Mirchi", "98.3 FM", 0xE3262E, "http://radios.crabdance.com:8002/1",
+     "mirchi,mirch,mirchy,98.3,98 3"},
 };
 
 std::string ToLower(std::string s) {
@@ -350,12 +352,25 @@ const RadioStation* RadioPlayer::FindStation(const std::string& spoken_name) {
     return nullptr;
 }
 
+const RadioStation* RadioPlayer::NextStation(const std::string& name, int step) {
+    const int count = static_cast<int>(kStations.size());
+    int index = 0;
+    for (int i = 0; i < count; i++) {
+        if (name == kStations[i].name) {
+            index = i;
+            break;
+        }
+    }
+    index = ((index + step) % count + count) % count;
+    return &kStations[index];
+}
+
 RadioPlayer::RadioPlayer(AudioService& audio_service) : audio_service_(audio_service) {}
 
 RadioPlayer::~RadioPlayer() { Stop(); }
 
 bool RadioPlayer::Start(const std::string& url, uint32_t playback_id,
-                        FinishedCallback finished_callback) {
+                        FinishedCallback finished_callback, StatusCallback status_callback) {
     if (playback_id == 0 || url.empty()) {
         return false;
     }
@@ -367,6 +382,7 @@ bool RadioPlayer::Start(const std::string& url, uint32_t playback_id,
         url_ = url;
         playback_id_ = playback_id;
         finished_callback_ = std::move(finished_callback);
+        status_callback_ = std::move(status_callback);
         active_ = true;
         worker_running_ = true;
         cancelled_ = false;
@@ -391,6 +407,21 @@ void RadioPlayer::Stop() {
     cancelled_ = true;
     active_ = false;
     finished_callback_ = nullptr;
+    status_callback_ = nullptr;
+}
+
+void RadioPlayer::ReportStatus(uint32_t playback_id, const char* status) {
+    StatusCallback callback;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (cancelled_ || !active_ || playback_id != playback_id_) {
+            return;
+        }
+        callback = status_callback_;
+    }
+    if (callback) {
+        callback(playback_id, status);
+    }
 }
 
 bool RadioPlayer::IsActive(uint32_t playback_id) const {
@@ -440,6 +471,7 @@ void RadioPlayer::WorkerTask() {
     bool ever_played = false;
 
     while (!IsCancelled(playback_id) && failures < kMaxConsecutiveFailures) {
+        ReportStatus(playback_id, ever_played ? "Reconnecting..." : "Connecting...");
         std::string content_type;
         int fd = OpenStream(url, content_type);
         if (fd < 0) {
@@ -522,6 +554,9 @@ void RadioPlayer::WorkerTask() {
                         ESP_LOGI(TAG, "Stream: %lu Hz, %d ch, %d bit",
                                  (unsigned long)info.sample_rate, info.channel,
                                  info.bits_per_sample);
+                    }
+                    if (!got_audio) {
+                        ReportStatus(playback_id, "Live");
                     }
                     got_audio = true;
                     sink_ok = sink.Write(out.buffer, out.decoded_size, info.sample_rate,

@@ -16,6 +16,8 @@
 #include <esp_lcd_st77916.h>
 #include <esp_timer.h>
 #include "esp_io_expander_tca9554.h"
+#include <esp_lcd_touch_cst816s.h>
+#include <esp_lvgl_port.h>
 
 #define TAG "waveshare_lcd_1_85c"
 
@@ -354,6 +356,51 @@ private:
                                     DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
+    // CST816 touch controller (shares the I2C bus; reset through the TCA9554
+    // together with the LCD). Enables tapping on-screen controls such as the
+    // radio screen.
+    void InitializeTouch() {
+        esp_lcd_panel_io_handle_t tp_io_handle = nullptr;
+        esp_lcd_panel_io_i2c_config_t tp_io_config = {};
+        tp_io_config.dev_addr = ESP_LCD_TOUCH_IO_I2C_CST816S_ADDRESS;
+        tp_io_config.scl_speed_hz = 100000;
+        tp_io_config.control_phase_bytes = 1;
+        tp_io_config.dc_bit_offset = 0;
+        tp_io_config.lcd_cmd_bits = 8;
+        tp_io_config.lcd_param_bits = 0;
+        tp_io_config.flags.disable_control_phase = 1;
+        if (esp_lcd_new_panel_io_i2c(i2c_bus_, &tp_io_config, &tp_io_handle) != ESP_OK) {
+            ESP_LOGW(TAG, "Touch panel IO init failed");
+            return;
+        }
+
+        esp_lcd_touch_config_t tp_cfg = {
+            .x_max = DISPLAY_WIDTH,
+            .y_max = DISPLAY_HEIGHT,
+            .rst_gpio_num = TP_PIN_NUM_RST,
+            .int_gpio_num = TP_PIN_NUM_INT,
+            .flags = {
+                .swap_xy = 0,
+                .mirror_x = 0,
+                .mirror_y = 0,
+            },
+        };
+        esp_lcd_touch_handle_t touch_handle = nullptr;
+        if (esp_lcd_touch_new_i2c_cst816s(tp_io_handle, &tp_cfg, &touch_handle) != ESP_OK) {
+            ESP_LOGW(TAG, "Touch controller CST816 not found");
+            return;
+        }
+        const lvgl_port_touch_cfg_t touch_cfg = {
+            .disp = lv_display_get_default(),
+            .handle = touch_handle,
+        };
+        if (lvgl_port_add_touch(&touch_cfg) == nullptr) {
+            ESP_LOGW(TAG, "Failed to register touch input");
+            return;
+        }
+        ESP_LOGI(TAG, "Touch panel initialized");
+    }
+
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
@@ -372,6 +419,7 @@ public:
         InitializeTca9554();
         InitializeSpi();
         Initializest77916Display();
+        InitializeTouch();
         InitializeButtons();
         GetBacklight()->RestoreBrightness();
     }

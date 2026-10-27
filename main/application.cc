@@ -11,6 +11,7 @@
 #include "system_info.h"
 #include "text_glyph_payload.h"
 #include "websocket_protocol.h"
+#include "radio/radio_screen.h"
 
 #include <driver/gpio.h>
 #include <esp_log.h>
@@ -293,7 +294,7 @@ void Application::Run() {
             if (HasPendingRadio()) {
                 pending_radio_ticks_++;
                 auto state = GetDeviceState();
-                if (state == kDeviceStateIdle && pending_radio_ticks_ >= 3) {
+                if (state == kDeviceStateIdle && pending_radio_ticks_ >= 1) {
                     StartRadioNow();  // playback-drained event may have been missed
                 } else if (state == kDeviceStateListening && pending_radio_ticks_ >= 6 &&
                            protocol_ && protocol_->IsAudioChannelOpened()) {
@@ -302,6 +303,9 @@ void Application::Run() {
                     ESP_LOGW(TAG, "Dropping radio request that never got to start");
                     pending_radio_url_.clear();
                     pending_radio_name_.clear();
+#ifdef HAVE_LVGL
+                    RadioScreen::GetInstance().Hide(Board::GetInstance().GetDisplay());
+#endif
                 }
             }
 
@@ -1119,10 +1123,9 @@ void Application::HandleStateChangedEvent() {
             if (!current_radio_name_.empty()) {
                 // Radio playback: show the station instead of "Speaking"
                 display->SetStatus(current_radio_name_.c_str());
-                display->SetEmotion("relaxed");
-                std::string hint = "Playing " + current_radio_name_ +
-                                   ". Say the wake word or press BOOT to stop.";
-                display->SetChatMessage("assistant", hint.c_str());
+#ifdef HAVE_LVGL
+                RadioScreen::GetInstance().Show(display, current_radio_name_);
+#endif
             } else {
                 display->SetStatus(Lang::Strings::SPEAKING);
             }
@@ -1287,6 +1290,11 @@ void Application::StopNotification() {
     notify_player_.Stop();
     radio_player_.Stop();
     current_radio_name_.clear();
+#ifdef HAVE_LVGL
+    if (!HasPendingRadio()) {  // keep the radio screen up while switching station
+        RadioScreen::GetInstance().Hide(Board::GetInstance().GetDisplay());
+    }
+#endif
     audio_service_.ResetDecoder();
     auto& board = Board::GetInstance();
     board.GetDisplay()->SetChatMessage("assistant", "");
@@ -1370,9 +1378,22 @@ void Application::StartRadioNow() {
         playback_id = ++notification_playback_id_;
     }
 
-    bool started = radio_player_.Start(url, playback_id, [this](uint32_t id, bool success) {
-        Schedule([this, id]() { HandleRadioFinished(id); });
-    });
+    bool started = radio_player_.Start(
+        url, playback_id,
+        [this](uint32_t id, bool success) {
+            Schedule([this, id]() { HandleRadioFinished(id); });
+        },
+        [this](uint32_t id, const char* status) {
+            std::string text = status;
+            Schedule([this, id, text]() {
+                if (GetDeviceState() == kDeviceStateNotifying && notification_playback_id_ == id) {
+#ifdef HAVE_LVGL
+                    RadioScreen::GetInstance().SetStatus(Board::GetInstance().GetDisplay(),
+                                                         text.c_str());
+#endif
+                }
+            });
+        });
     if (!started) {
         ESP_LOGE(TAG, "Failed to start radio");
         StopNotification();
