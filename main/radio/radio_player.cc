@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "esp_ae_rate_cvt.h"
+#include "esp_audio_dec_default.h"
 #include "esp_audio_simple_dec.h"
 #include "esp_audio_simple_dec_default.h"
 
@@ -212,7 +213,16 @@ esp_audio_simple_dec_type_t SniffType(const uint8_t* d, size_t n) {
 void RegisterDecodersOnce() {
     static bool registered = false;
     if (!registered) {
-        esp_audio_simple_dec_register_default();
+        // The simple decoder only parses the stream; the actual MP3/AAC
+        // decoders must be registered separately.
+        auto ret = esp_audio_dec_register_default();
+        if (ret != ESP_AUDIO_ERR_OK) {
+            ESP_LOGW(TAG, "esp_audio_dec_register_default returned %d", ret);
+        }
+        ret = esp_audio_simple_dec_register_default();
+        if (ret != ESP_AUDIO_ERR_OK) {
+            ESP_LOGW(TAG, "esp_audio_simple_dec_register_default returned %d", ret);
+        }
         registered = true;
     }
 }

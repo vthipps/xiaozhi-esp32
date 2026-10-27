@@ -612,8 +612,13 @@ void Application::InitializeProtocol() {
     });
 
     protocol_->OnAudioChannelClosed([this, &board]() {
-        board.SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
-        Schedule([this]() {
+        Schedule([this, &board]() {
+            // A late "goodbye" from the server must not interrupt a radio or
+            // notification that has already started playing.
+            if (GetDeviceState() == kDeviceStateNotifying) {
+                return;
+            }
+            board.SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
             auto display = Board::GetInstance().GetDisplay();
             display->SetChatMessage("system", "");
             SetDeviceState(kDeviceStateIdle);
