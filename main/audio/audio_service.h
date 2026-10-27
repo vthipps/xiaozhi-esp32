@@ -143,6 +143,10 @@ public:
     void SetCallbacks(AudioServiceCallbacks& callbacks);
 
     bool PushPacketToDecodeQueue(std::unique_ptr<AudioStreamPacket> packet, bool wait = false);
+    // Queue already-decoded mono PCM (at GetOutputSampleRate()) for playback.
+    // Returns false if playback is reset or the service stops while waiting.
+    bool PushPcmToPlaybackQueue(std::vector<int16_t>&& pcm, uint32_t playback_id, bool wait = true);
+    int GetOutputSampleRate() const { return codec_ ? codec_->output_sample_rate() : 0; }
     std::unique_ptr<AudioStreamPacket> PopPacketFromSendQueue();
     void PlaySound(const std::string_view& sound);
     bool ReadAudioData(std::vector<int16_t>& data, int sample_rate, int samples);

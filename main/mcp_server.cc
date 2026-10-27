@@ -59,6 +59,46 @@ void McpServer::AddCommonTools() {
                 return true;
             });
 
+#if CONFIG_USE_RADIO_PLAYER
+    {
+        std::string names;
+        for (const auto& st : RadioPlayer::Stations()) {
+            if (!names.empty()) {
+                names += ", ";
+            }
+            names += st.name;
+        }
+        AddTool("self.radio.play",
+                "Play a live Tamil FM radio station on the speaker. Use this whenever the user "
+                "asks to play, listen to, put on or switch to the radio, a radio station, or "
+                "Tamil songs/music. Available stations: " +
+                    names +
+                    ". If no station is named, use the first one. After calling this tool, reply "
+                    "with one short sentence such as 'Playing Suryan FM.' and nothing else; the "
+                    "radio starts when you finish speaking and stops when the user says the wake "
+                    "word.",
+                PropertyList({Property("station", kPropertyTypeString)}),
+                [names](const PropertyList& properties) -> ReturnValue {
+                    auto requested = properties["station"].value<std::string>();
+                    auto station = RadioPlayer::FindStation(requested);
+                    if (station == nullptr) {
+                        return std::string("{\"success\": false, \"message\": \"Unknown "
+                                           "station. Available: ") +
+                               names + "\"}";
+                    }
+                    Application::GetInstance().RequestRadio(station->name, station->url);
+                    return std::string("{\"success\": true, \"station\": \"") +
+                           station->name + "\"}";
+                });
+
+        AddTool("self.radio.stop", "Stop the radio if it is playing.", PropertyList(),
+                [](const PropertyList& properties) -> ReturnValue {
+                    Application::GetInstance().RequestStopRadio();
+                    return true;
+                });
+    }
+#endif
+
     auto backlight = board.GetBacklight();
     if (backlight) {
         AddTool("self.screen.set_brightness", "Set the brightness of the screen.",

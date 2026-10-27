@@ -5,7 +5,9 @@
     "builds": [
         {
             "name": "esp32-s3-touch-lcd-1.85c",
-            "sdkconfig_append": []
+            "sdkconfig_append": [
+                "CONFIG_USE_RADIO_PLAYER=y"
+            ]
         }
     ]
 }

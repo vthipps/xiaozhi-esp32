@@ -1,0 +1,41 @@
+name: Build Tamil Radio firmware (ESP32-S3-Touch-LCD-1.85C)
+
+# Builds only the Waveshare 1.85C board with the radio player enabled.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - radio
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build 1.85C (English, Hello XiaoZhi wake word)
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v6.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build
+        shell: bash
+        run: |
+          source "$IDF_PATH/export.sh"
+          python scripts/build.py waveshare/esp32-s3-touch-lcd-1.85c \
+            --name esp32-s3-touch-lcd-1.85c \
+            --language en-US \
+            --wake-word nihaoxiaozhi
+
+      - name: Check radio player is enabled
+        shell: bash
+        run: grep -q "CONFIG_USE_RADIO_PLAYER=y" sdkconfig
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v7
+        with:
+          name: xiaozhi-tamil-radio-1.85c-${{ github.sha }}
+          path: build/merged-binary.bin
+          if-no-files-found: error

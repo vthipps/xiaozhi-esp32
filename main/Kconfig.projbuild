@@ -1064,6 +1064,13 @@ config USE_SERVER_AEC
     help
         To work perperly, server-side AEC requires server support
 
+config USE_RADIO_PLAYER
+    bool "Enable internet radio player (self.radio.play / self.radio.stop MCP tools)"
+    default n
+    help
+        Adds a live MP3/AAC internet radio player and MCP tools so the assistant can
+        play radio stations when asked. Stations are defined in main/radio/radio_player.cc.
+
 config USE_AUDIO_DEBUGGER
     bool "Enable Audio Debugger"
     default n

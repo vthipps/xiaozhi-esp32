@@ -20,6 +20,7 @@
 #include "device_state.h"
 #include "device_state_machine.h"
 #include "notify/notify_player.h"
+#include "radio/radio_player.h"
 
 // Main event bits
 #define MAIN_EVENT_SCHEDULE             (1 << 0)
@@ -126,6 +127,14 @@ public:
      */
     void ResetProtocol();
 
+    /**
+     * Internet radio (thread-safe). The radio starts once the current
+     * conversation has finished speaking, and plays until the wake word,
+     * the BOOT button, or RequestStopRadio() stops it.
+     */
+    void RequestRadio(const std::string& station_name, const std::string& url);
+    void RequestStopRadio();
+
 private:
     Application();
     ~Application();
@@ -143,7 +152,11 @@ private:
     std::string startup_wake_word_hint_message_;
     AudioService audio_service_;
     NotifyPlayer notify_player_;
+    RadioPlayer radio_player_;
     uint32_t notification_playback_id_ = 0;
+    std::string pending_radio_name_;
+    std::string pending_radio_url_;
+    int pending_radio_ticks_ = 0;
     std::unique_ptr<Ota> ota_;
 
     std::function<void(const std::string&)> mcp_broadcast_callback_;
@@ -178,6 +191,9 @@ private:
     void StartNotification(std::string audio_url, std::vector<NotifySubtitle> subtitles);
     void StopNotification();
     void HandleNotificationFinished(uint32_t playback_id, bool success);
+    void StartRadioNow();
+    void HandleRadioFinished(uint32_t playback_id);
+    bool HasPendingRadio() const { return !pending_radio_url_.empty(); }
 
     // Activation task (runs in background)
     void ActivationTask();
