@@ -330,6 +330,29 @@ def _wake_word_sdkconfig_options(
     target: str,
 ) -> tuple[str, list[str], list[str]]:
     """Map a wake-word model to implementation and model Kconfig options."""
+    # "custom:<phrase>" uses the MultiNet English command model, so any phrase
+    # (e.g. "custom:hi thipps") can be the wake word.
+    if wake_word.strip().casefold().startswith("custom:"):
+        phrase = " ".join(wake_word.split(":", 1)[1].split()).casefold()
+        if not phrase or not re.fullmatch(r"[a-z ]+", phrase):
+            raise ValueError(f"Custom wake word must be English letters and spaces: {wake_word!r}")
+        if target not in _AFE_WAKE_WORD_TARGETS:
+            raise ValueError(f"Custom wake words are not supported for target {target}")
+        display = phrase.title()
+        options = [
+            "CONFIG_WAKE_WORD_DISABLED=n",
+            "CONFIG_USE_ESP_WAKE_WORD=n",
+            "CONFIG_USE_AFE_WAKE_WORD=n",
+            "CONFIG_USE_CUSTOM_WAKE_WORD=y",
+            f'CONFIG_CUSTOM_WAKE_WORD="{phrase}"',
+            f'CONFIG_CUSTOM_WAKE_WORD_DISPLAY="{display}"',
+            "CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=20",
+            "CONFIG_SR_MN_CN_NONE=y",
+            "CONFIG_SR_MN_EN_MULTINET7_QUANT=y",
+        ]
+        return (f"custom:{phrase}", options,
+                ["CONFIG_USE_CUSTOM_WAKE_WORD", "CONFIG_SR_MN_EN_MULTINET7_QUANT"])
+
     normalized = wake_word.strip().casefold().replace("-", "_")
     if normalized == "nihaoxiaozhi":
         normalized = (

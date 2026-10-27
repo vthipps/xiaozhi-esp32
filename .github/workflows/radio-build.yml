@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Build 1.85C (English, Hello XiaoZhi wake word)
+    name: Build 1.85C (English, wake word: Hi Thipps)
     runs-on: ubuntu-latest
     container:
       image: espressif/idf:release-v6.1
@@ -27,11 +27,15 @@ jobs:
           python scripts/build.py waveshare/esp32-s3-touch-lcd-1.85c \
             --name esp32-s3-touch-lcd-1.85c \
             --language en-US \
-            --wake-word nihaoxiaozhi
+            --wake-word "custom:hi thipps"
 
-      - name: Check radio player is enabled
+      - name: Check radio player and custom wake word are enabled
         shell: bash
-        run: grep -q "CONFIG_USE_RADIO_PLAYER=y" sdkconfig
+        run: |
+          grep -q "CONFIG_USE_RADIO_PLAYER=y" sdkconfig
+          grep -q "CONFIG_USE_CUSTOM_WAKE_WORD=y" sdkconfig
+          grep -q 'CONFIG_CUSTOM_WAKE_WORD="hi thipps"' sdkconfig
+          grep -q "CONFIG_SR_MN_EN_MULTINET7_QUANT=y" sdkconfig
 
       - name: Upload firmware
         uses: actions/upload-artifact@v7
